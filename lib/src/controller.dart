@@ -142,7 +142,9 @@ class MapboxMapController extends ChangeNotifier {
         onMapIdle();
       }
     });
-    MapboxGlPlatform.getInstance(_id).onUserLocationUpdatedPlatform.add((location) { 
+    MapboxGlPlatform.getInstance(_id)
+        .onUserLocationUpdatedPlatform
+        .add((location) {
       onUserLocationUpdated?.call(location);
     });
   }
@@ -621,7 +623,8 @@ class MapboxMapController extends ChangeNotifier {
   Future<Fill> addFill(FillOptions options, [Map data]) async {
     final FillOptions effectiveOptions =
         FillOptions.defaultOptions.copyWith(options);
-    final fill = await MapboxGlPlatform.getInstance(_id).addFill(effectiveOptions);
+    final fill =
+        await MapboxGlPlatform.getInstance(_id).addFill(effectiveOptions);
     _fills[fill.id] = fill;
     notifyListeners();
     return fill;
@@ -758,7 +761,8 @@ class MapboxMapController extends ChangeNotifier {
   }
 
   /// Adds an image source to the style currently displayed in the map, so that it can later be referred to by the provided name.
-  Future<void> addImageSource(String name, Uint8List bytes, LatLngQuad coordinates) {
+  Future<void> addImageSource(
+      String name, Uint8List bytes, LatLngQuad coordinates) {
     return MapboxGlPlatform.getInstance(_id)
         .addImageSource(name, bytes, coordinates);
   }
@@ -795,8 +799,8 @@ class MapboxMapController extends ChangeNotifier {
 
   /// Returns the distance spanned by one pixel at the specified [latitude] and current zoom level.
   /// The distance between pixels decreases as the latitude approaches the poles. This relationship parallels the relationship between longitudinal coordinates at different latitudes.
-  Future<double> getMetersPerPixelAtLatitude(double latitude) async{
-    return MapboxGlPlatform.getInstance(_id).getMetersPerPixelAtLatitude(latitude);
+  Future<double> getMetersPerPixelAtLatitude(double latitude) async {
+    return MapboxGlPlatform.getInstance(_id)
+        .getMetersPerPixelAtLatitude(latitude);
   }
-
 }

@@ -4,6 +4,7 @@
 
 library mapbox_gl;
 
+import 'dart:io' show Platform;
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
@@ -36,7 +37,6 @@ export 'package:mapbox_gl_platform_interface/mapbox_gl_platform_interface.dart'
         LineOptions,
         Fill,
         FillOptions;
-
 
 part 'src/controller.dart';
 part 'src/mapbox_map.dart';
