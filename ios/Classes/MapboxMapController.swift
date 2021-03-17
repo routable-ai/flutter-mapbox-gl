@@ -22,6 +22,8 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
     private var lineAnnotationController: MGLLineAnnotationController?
     private var fillAnnotationController: MGLPolygonAnnotationController?
 
+    private var annotationOrder = [String]()
+
     func view() -> UIView {
         return mapView
     }
@@ -62,6 +64,9 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
                 let zoom = initialCameraPosition["zoom"] as? Double {
                 mapView.setCenter(camera.centerCoordinate, zoomLevel: zoom, direction: camera.heading, animated: false)
                 initialTilt = camera.pitch
+            }
+            if let annotationOrderArg = args["annotationOrder"] as? [String] {
+                annotationOrder = annotationOrderArg
             }
         }
     }
@@ -187,7 +192,7 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
             guard let arguments = methodCall.arguments as? [String: Any] else { return }
             guard let x = arguments["x"] as? Double else { return }
             guard let y = arguments["y"] as? Double else { return }
-            let screenPoint: CGPoint = CGPoint(x: y, y:y)
+            let screenPoint: CGPoint = CGPoint(x: x, y:y)
             let coordinates: CLLocationCoordinate2D = mapView.convert(screenPoint, toCoordinateFrom: mapView)
             var reply = [String: NSObject]()
             reply["latitude"] = coordinates.latitude as NSObject
@@ -461,7 +466,7 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
             result(nil)
         case "style#addImageSource":
             guard let arguments = methodCall.arguments as? [String: Any] else { return }
-            guard let name = arguments["name"] as? String else { return }
+            guard let imageSourceId = arguments["imageSourceId"] as? String else { return }
             guard let bytes = arguments["bytes"] as? FlutterStandardTypedData else { return }
             guard let data = bytes.data as? Data else { return }
             guard let image = UIImage(data: data) else { return }
@@ -474,29 +479,69 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
                 topRight: CLLocationCoordinate2D(latitude: coordinates[1][0], longitude: coordinates[1][1])
             )
             
-            let source = MGLImageSource(identifier: name, coordinateQuad: quad, image: image)
+            //Check for duplicateSource error
+            if (self.mapView.style?.source(withIdentifier:  imageSourceId) != nil) {
+                result(FlutterError(code: "duplicateSource", message: "Source with imageSourceId \(imageSourceId) already exists", details: "Can't add duplicate source with imageSourceId: \(imageSourceId)" ))
+                return
+            }
+            
+            let source = MGLImageSource(identifier: imageSourceId, coordinateQuad: quad, image: image)
             self.mapView.style?.addSource(source)
             
             result(nil)
         case "style#removeImageSource":
             guard let arguments = methodCall.arguments as? [String: Any] else { return }
-            guard let name = arguments["name"] as? String else { return }
-            guard let source = self.mapView.style?.source(withIdentifier: name) else { return }
+            guard let imageSourceId = arguments["imageSourceId"] as? String else { return }
+            guard let source = self.mapView.style?.source(withIdentifier: imageSourceId) else { return }
             self.mapView.style?.removeSource(source)
             result(nil)
         case "style#addLayer":
             guard let arguments = methodCall.arguments as? [String: Any] else { return }
-            guard let name = arguments["name"] as? String else { return }
-            guard let sourceId = arguments["sourceId"] as? String else { return }
+            guard let imageLayerId = arguments["imageLayerId"] as? String else { return }
+            guard let imageSourceId = arguments["imageSourceId"] as? String else { return }
             
-            guard let source = self.mapView.style?.source(withIdentifier: sourceId) else { return }
-            let layer = MGLRasterStyleLayer(identifier: name, source: source)
+            //Check for duplicateLayer error
+            if (self.mapView.style?.layer(withIdentifier: imageLayerId)) != nil {
+                result(FlutterError(code: "duplicateLayer", message: "Layer already exists", details: "Can't add duplicate layer with imageLayerId: \(imageLayerId)" ))
+                return
+            }
+            //Check for noSuchSource error
+            guard let source = self.mapView.style?.source(withIdentifier: imageSourceId) else {
+                result(FlutterError(code: "noSuchSource", message: "No source found with imageSourceId \(imageSourceId)", details: "Can't add add layer for imageSourceId \(imageLayerId), as the source does not exist." ))
+                return
+            }
+            
+            let layer = MGLRasterStyleLayer(identifier: imageLayerId, source: source)
             self.mapView.style?.addLayer(layer)
+            result(nil)
+        case "style#addLayerBelow":
+            guard let arguments = methodCall.arguments as? [String: Any] else { return }
+            guard let imageLayerId = arguments["imageLayerId"] as? String else { return }
+            guard let imageSourceId = arguments["imageSourceId"] as? String else { return }
+            guard let belowLayerId = arguments["belowLayerId"] as? String else { return }
+            
+            //Check for duplicateLayer error
+            if (self.mapView.style?.layer(withIdentifier: imageLayerId)) != nil {
+                result(FlutterError(code: "duplicateLayer", message: "Layer already exists", details: "Can't add duplicate layer with imageLayerId: \(imageLayerId)" ))
+                return
+            }
+            //Check for noSuchSource error
+            guard let source = self.mapView.style?.source(withIdentifier: imageSourceId) else {
+                result(FlutterError(code: "noSuchSource", message: "No source found with imageSourceId \(imageSourceId)", details: "Can't add add layer for imageSourceId \(imageLayerId), as the source does not exist." ))
+                return
+            }
+            //Check for noSuchLayer error
+            guard let belowLayer = self.mapView.style?.layer(withIdentifier: belowLayerId) else {
+                result(FlutterError(code: "noSuchLayer", message: "No layer found with layerId \(belowLayerId)", details: "Can't insert layer below layer with id \(belowLayerId), as no such layer exists." ))
+                return
+            }
+            let layer = MGLRasterStyleLayer(identifier: imageLayerId, source: source)
+            self.mapView.style?.insertLayer(layer, below: belowLayer)
             result(nil)
         case "style#removeLayer":
             guard let arguments = methodCall.arguments as? [String: Any] else { return }
-            guard let name = arguments["name"] as? String else { return }
-            guard let layer = self.mapView.style?.layer(withIdentifier: name) else { return }
+            guard let imageLayerId = arguments["imageLayerId"] as? String else { return }
+            guard let layer = self.mapView.style?.layer(withIdentifier: imageLayerId) else { return }
             self.mapView.style?.removeLayer(layer)
             result(nil)
         default:
@@ -588,7 +633,13 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
      *  MGLAnnotationControllerDelegate
      */
     func annotationController(_ annotationController: MGLAnnotationController, didSelect styleAnnotation: MGLStyleAnnotation) {
-        annotationController.deselectStyleAnnotation(styleAnnotation)
+        DispatchQueue.main.async {
+            // Remove tint color overlay from selected annotation by
+            // deselecting. This is not handled correctly if requested
+            // synchronously from the callback.
+            annotationController.deselectStyleAnnotation(styleAnnotation)
+        }
+
         guard let channel = channel else {
             return
         }
@@ -625,22 +676,29 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
             mapView.setCamera(camera, animated: false)
         }
 
-        lineAnnotationController = MGLLineAnnotationController(mapView: self.mapView)
-        lineAnnotationController!.annotationsInteractionEnabled = true
-        lineAnnotationController?.delegate = self
+        for annotationType in annotationOrder {
+            switch annotationType {
+            case "AnnotationType.fill":
+                fillAnnotationController = MGLPolygonAnnotationController(mapView: self.mapView)
+                fillAnnotationController!.annotationsInteractionEnabled = true
+                fillAnnotationController?.delegate = self
+            case "AnnotationType.line":
+                lineAnnotationController = MGLLineAnnotationController(mapView: self.mapView)
+                lineAnnotationController!.annotationsInteractionEnabled = true
+                lineAnnotationController?.delegate = self
+            case "AnnotationType.circle":
+                circleAnnotationController = MGLCircleAnnotationController(mapView: self.mapView)
+                circleAnnotationController!.annotationsInteractionEnabled = true
+                circleAnnotationController?.delegate = self
+            case "AnnotationType.symbol":
+                symbolAnnotationController = MGLSymbolAnnotationController(mapView: self.mapView)
+                symbolAnnotationController!.annotationsInteractionEnabled = true
+                symbolAnnotationController?.delegate = self
+            default:
+                print("Unknown annotation type: \(annotationType), must be either 'fill', 'line', 'circle' or 'symbol'")  
+            }
+        }
 
-        symbolAnnotationController = MGLSymbolAnnotationController(mapView: self.mapView)
-        symbolAnnotationController!.annotationsInteractionEnabled = true
-        symbolAnnotationController?.delegate = self
-        
-        circleAnnotationController = MGLCircleAnnotationController(mapView: self.mapView)
-        circleAnnotationController!.annotationsInteractionEnabled = true
-        circleAnnotationController?.delegate = self
-
-        fillAnnotationController = MGLPolygonAnnotationController(mapView: self.mapView)
-        fillAnnotationController!.annotationsInteractionEnabled = true
-        fillAnnotationController?.delegate = self
-        
         mapReadyResult?(nil)
         if let channel = channel {
             channel.invokeMethod("map#onStyleLoaded", arguments: nil)
@@ -709,7 +767,8 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
     func mapView(_ mapView: MGLMapView, didUpdate userLocation: MGLUserLocation?) {
         if let channel = channel, let userLocation = userLocation, let location = userLocation.location {
             channel.invokeMethod("map#onUserLocationUpdated", arguments: [
-                "userLocation": location.toDict()
+                "userLocation": location.toDict(),
+                "heading": userLocation.heading?.toDict()
             ]);
        }
    }
@@ -745,8 +804,11 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
     }
     
     func mapView(_ mapView: MGLMapView, regionDidChangeAnimated animated: Bool) {
+        let arguments = trackCameraPosition ? [
+            "position": getCamera()?.toDict(mapView: mapView)
+        ] : [:];
         if let channel = channel {
-            channel.invokeMethod("camera#onIdle", arguments: []);
+            channel.invokeMethod("camera#onIdle", arguments: arguments);
         }
     }
     
@@ -765,12 +827,15 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
         mapView.maximumZoomLevel = max
     }
     func setStyleString(styleString: String) {
-        // Check if json, url or plain string:
+        // Check if json, url, absolute path or asset path:
         if styleString.isEmpty {
             NSLog("setStyleString - string empty")
         } else if (styleString.hasPrefix("{") || styleString.hasPrefix("[")) {
             // Currently the iOS Mapbox SDK does not have a builder for json.
             NSLog("setStyleString - JSON style currently not supported")
+        } else if (styleString.hasPrefix("/")) {
+            // Absolute path
+            mapView.styleURL = URL(fileURLWithPath: styleString, isDirectory: false)
         } else if (
             !styleString.hasPrefix("http://") && 
             !styleString.hasPrefix("https://") && 
@@ -778,6 +843,8 @@ class MapboxMapController: NSObject, FlutterPlatformView, MGLMapViewDelegate, Ma
             // We are assuming that the style will be loaded from an asset here.
             let assetPath = registrar.lookupKey(forAsset: styleString)
             mapView.styleURL = URL(string: assetPath, relativeTo: Bundle.main.resourceURL)
+            
+            
         } else {
             mapView.styleURL = URL(string: styleString)
         }
