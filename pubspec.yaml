@@ -10,12 +10,10 @@ dependencies:
         git:
             url: https://github.com/routable-ai/flutter-mapbox-gl
             path: mapbox_gl_platform_interface
-            ref: fix/trc/0.10.0
     mapbox_gl_web:
         git:
             url: https://github.com/routable-ai/flutter-mapbox-gl
             path: mapbox_gl_web
-            ref: fix/trc/0.10.0
 
 flutter:
     plugin:
