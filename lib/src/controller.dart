@@ -95,8 +95,13 @@ class MapboxMapController extends ChangeNotifier {
       notifyListeners();
     });
 
-    MapboxGlPlatform.getInstance(_id).onCameraIdlePlatform.add((_) {
+    MapboxGlPlatform.getInstance(_id)
+        .onCameraIdlePlatform
+        .add((cameraPosition) {
       _isCameraMoving = false;
+      if (cameraPosition != null) {
+        _cameraPosition = cameraPosition;
+      }
       if (onCameraIdle != null) {
         onCameraIdle();
       }
@@ -142,7 +147,9 @@ class MapboxMapController extends ChangeNotifier {
         onMapIdle();
       }
     });
-    MapboxGlPlatform.getInstance(_id).onUserLocationUpdatedPlatform.add((location) { 
+    MapboxGlPlatform.getInstance(_id)
+        .onUserLocationUpdatedPlatform
+        .add((location) {
       onUserLocationUpdated?.call(location);
     });
   }
@@ -621,7 +628,8 @@ class MapboxMapController extends ChangeNotifier {
   Future<Fill> addFill(FillOptions options, [Map data]) async {
     final FillOptions effectiveOptions =
         FillOptions.defaultOptions.copyWith(options);
-    final fill = await MapboxGlPlatform.getInstance(_id).addFill(effectiveOptions);
+    final fill =
+        await MapboxGlPlatform.getInstance(_id).addFill(effectiveOptions, data);
     _fills[fill.id] = fill;
     notifyListeners();
     return fill;
@@ -640,6 +648,21 @@ class MapboxMapController extends ChangeNotifier {
     assert(changes != null);
     await MapboxGlPlatform.getInstance(_id).updateFill(fill, changes);
     fill.options = fill.options.copyWith(changes);
+    notifyListeners();
+  }
+
+  /// Removes all [fill] from the map.
+  ///
+  /// Change listeners are notified once all fills have been removed on the
+  /// platform side.
+  ///
+  /// The returned [Future] completes once listeners have been notified.
+  Future<void> clearFills() async {
+    assert(_fills != null);
+    final List<String> fillIds = List<String>.from(_fills.keys);
+    for (String id in fillIds) {
+      await _removeFill(id);
+    }
     notifyListeners();
   }
 
@@ -757,25 +780,34 @@ class MapboxMapController extends ChangeNotifier {
         .setSymbolTextIgnorePlacement(enable);
   }
 
-  /// Adds an image source to the style currently displayed in the map, so that it can later be referred to by the provided name.
-  Future<void> addImageSource(String name, Uint8List bytes, LatLngQuad coordinates) {
+  /// Adds an image source to the style currently displayed in the map, so that it can later be referred to by the provided id.
+  Future<void> addImageSource(
+      String imageSourceId, Uint8List bytes, LatLngQuad coordinates) {
     return MapboxGlPlatform.getInstance(_id)
-        .addImageSource(name, bytes, coordinates);
+        .addImageSource(imageSourceId, bytes, coordinates);
   }
 
-  /// Removes previously added image source by name
-  Future<void> removeImageSource(String name) {
-    return MapboxGlPlatform.getInstance(_id).removeImageSource(name);
+  /// Removes previously added image source by id
+  Future<void> removeImageSource(String imageSourceId) {
+    return MapboxGlPlatform.getInstance(_id).removeImageSource(imageSourceId);
   }
 
-  /// Adds layer with name
-  Future<void> addLayer(String name, String sourceId) {
-    return MapboxGlPlatform.getInstance(_id).addLayer(name, sourceId);
+  /// Adds a Mapbox style layer to the map's style at render time.
+  Future<void> addLayer(String imageLayerId, String imageSourceId) {
+    return MapboxGlPlatform.getInstance(_id)
+        .addLayer(imageLayerId, imageSourceId);
   }
 
-  /// Removes layer by name
-  Future<void> removeLayer(String name) {
-    return MapboxGlPlatform.getInstance(_id).removeLayer(name);
+  /// Adds a Mapbox style layer below the layer provided with belowLayerId to the map's style at render time,
+  Future<void> addLayerBelow(
+      String imageLayerId, String imageSourceId, String belowLayerId) {
+    return MapboxGlPlatform.getInstance(_id)
+        .addLayerBelow(imageLayerId, imageSourceId, belowLayerId);
+  }
+
+  /// Removes a Mapbox style layer
+  Future<void> removeLayer(String imageLayerId) {
+    return MapboxGlPlatform.getInstance(_id).removeLayer(imageLayerId);
   }
 
   /// Returns the point on the screen that corresponds to a geographical coordinate ([latLng]). The screen location is in screen pixels (not display pixels) relative to the top left of the map (not of the whole screen)
@@ -795,8 +827,8 @@ class MapboxMapController extends ChangeNotifier {
 
   /// Returns the distance spanned by one pixel at the specified [latitude] and current zoom level.
   /// The distance between pixels decreases as the latitude approaches the poles. This relationship parallels the relationship between longitudinal coordinates at different latitudes.
-  Future<double> getMetersPerPixelAtLatitude(double latitude) async{
-    return MapboxGlPlatform.getInstance(_id).getMetersPerPixelAtLatitude(latitude);
+  Future<double> getMetersPerPixelAtLatitude(double latitude) async {
+    return MapboxGlPlatform.getInstance(_id)
+        .getMetersPerPixelAtLatitude(latitude);
   }
-
 }
